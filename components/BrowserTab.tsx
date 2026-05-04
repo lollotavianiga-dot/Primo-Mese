@@ -275,7 +275,7 @@ const BrowserTab: React.FC<BrowserTabProps> = ({ tab, srcDoc, onNavigate, onTogg
                  )}
                  
                  <div className="pt-8 border-t border-gray-800 text-center text-xs text-gray-600">
-                     Search results provided by Gemini Grounding
+                     Search results provided by OpenAI
                  </div>
              </div>
            </div>

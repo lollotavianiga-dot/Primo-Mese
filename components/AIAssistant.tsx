@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, X, Loader2, Image as ImageIcon, Video, Mic, Paperclip, Trash2, Copy, Terminal, Zap, Search, MapPin, Brain, Layers, Users, LogOut, MessageSquare, Link, FileCode2 } from 'lucide-react';
-import { chatWithGemini, generateImage, generateVideo, connectLive, transcribeAudio, formatCode, generateProject } from '../services/geminiService';
+import { chatWithOpenAI, generateImage, generateVideo, connectLive, transcribeAudio, formatCode, generateProject } from '../services/openaiService';
 import { ChatMessage, ChatMode, AspectRatio, ImageSize, User as UserType, VirtualFile } from '../types';
 import Logo from './Logo';
 
@@ -88,7 +88,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ currentCode, files, isOpen, o
   const [activeTab, setActiveTab] = useState<'chat' | 'create' | 'live' | 'share'>('chat');
   
   // Chat State
-  const [messages, setMessages] = useState<ChatMessage[]>([{ id: '1', role: 'model', text: 'Hi! I am your Gemini Copilot. How can I help with your code today?' }]);
+  const [messages, setMessages] = useState<ChatMessage[]>([{ id: '1', role: 'model', text: 'Hi! I am your OpenAI Copilot. How can I help with your code today?' }]);
   const [input, setInput] = useState('');
   const [chatMode, setChatMode] = useState<ChatMode>('standard');
   const [attachment, setAttachment] = useState<{base64: string, mimeType: string} | null>(null);
@@ -330,7 +330,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ currentCode, files, isOpen, o
          setMessages(p => [...p, { id: Date.now().toString(), role: 'model', text: `Transcription: ${transcript}` }]);
       } else {
          const fileContext = files.map(f => `File: ${f.name}\nLanguage: ${f.language}\nSize: ${f.content.length} chars`).join('\n---\n');
-         const response = await chatWithGemini(userMsg.text, chatMode, attachment ? [attachment] : [], currentCode, fileContext);
+         const response = await chatWithOpenAI(userMsg.text, chatMode, attachment ? [attachment] : [], currentCode, fileContext);
          
          const { text, toolCalls } = response as any;
 
@@ -399,7 +399,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ currentCode, files, isOpen, o
               
               You MUST wrap the CSS code in \`\`\`css ... \`\`\` blocks.`;
               
-              const response = await chatWithGemini(animationPrompt, 'standard');
+              const response = await chatWithOpenAI(animationPrompt, 'standard');
               const responseText = (response as any).text;
               
               // Improved Extraction Logic: Find the CSS block specifically
@@ -602,7 +602,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ currentCode, files, isOpen, o
                                     }
                                 }}
                                 onPaste={handlePaste}
-                                placeholder="Message Gemini..."
+                                placeholder="Message OpenAI..."
                                 className="w-full bg-[#2a2a2a] border border-gray-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 resize-none custom-scrollbar leading-relaxed"
                                 style={{ minHeight: '46px', maxHeight: '150px' }}
                                 rows={1}
@@ -617,7 +617,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ currentCode, files, isOpen, o
                         </button>
                     </div>
                     <div className="text-[10px] text-gray-600 text-center mt-2">
-                        Gemini can make mistakes. Check important info.
+                        OpenAI can make mistakes. Check important info.
                     </div>
                  </div>
               </>
@@ -841,7 +841,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ currentCode, files, isOpen, o
                   <p className="text-sm text-gray-400 mb-10 max-w-[240px] leading-relaxed relative z-10">
                       {isLiveConnected 
                           ? 'Listening...' 
-                          : 'Experience real-time, low-latency conversation with Gemini 2.5.'}
+                          : 'Experience real-time, low-latency conversation with OpenAI.'}
                   </p>
 
                   <button

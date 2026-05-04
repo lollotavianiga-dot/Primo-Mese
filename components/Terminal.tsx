@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Terminal as TerminalIcon, ShieldAlert, Wifi, Globe, Server, Activity, Play, Cpu } from 'lucide-react';
 import { VirtualFile, User } from '../types';
-import { runCodeSimulation } from '../services/geminiService';
+import { runCodeSimulation } from '../services/openaiService';
 
 interface TerminalProps {
   files: VirtualFile[];

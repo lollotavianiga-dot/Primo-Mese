@@ -16,7 +16,7 @@ import UserProfilePage from './components/UserProfilePage';
 import Terminal from './components/Terminal';
 import Contact from './components/Contact';
 import Courses from './components/Courses';
-import { searchWeb, readPageContent, fixCode, formatCode } from './services/geminiService';
+import { searchWeb, readPageContent, fixCode, formatCode } from './services/openaiService';
 
 // Initial Empty Project
 const INITIAL_FILES: VirtualFile[] = [
