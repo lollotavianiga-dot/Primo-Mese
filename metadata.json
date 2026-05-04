@@ -1,0 +1,10 @@
+{
+  "name": "Deploy Studio",
+  "description": "A browser-like environment designed for developers. Write code, execute it instantly, analyze logs, and consult with a built-in Gemini AI assistant in a unified workspace.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}

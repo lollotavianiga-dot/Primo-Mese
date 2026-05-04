@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Deploy Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              browser: {
+                bg: '#1e1e1e',
+                toolbar: '#2d2d2d',
+                tab: '#3c3c3c',
+                active: '#1e1e1e',
+                text: '#cccccc',
+                accent: '#3b82f6'
+              }
+            },
+            fontFamily: {
+              mono: ['Menlo', 'Monaco', 'Courier New', 'monospace'],
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Custom scrollbar for a pro feel */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1e1e1e;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #4b4b4b;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #5b5b5b;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "lucide-react": "https://esm.sh/lucide-react@^0.564.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
+    "prettier/standalone": "https://esm.sh/prettier@3.2.5/standalone",
+    "prettier/plugins/babel": "https://esm.sh/prettier@3.2.5/plugins/babel",
+    "prettier/plugins/estree": "https://esm.sh/prettier@3.2.5/plugins/estree",
+    "prettier/plugins/html": "https://esm.sh/prettier@3.2.5/plugins/html",
+    "prettier/plugins/postcss": "https://esm.sh/prettier@3.2.5/plugins/postcss",
+    "prettier/plugins/markdown": "https://esm.sh/prettier@3.2.5/plugins/markdown",
+    "prettier/": "https://esm.sh/prettier@^3.8.1/",
+    "styled-components": "https://esm.sh/styled-components@6.1.8?deps=react@19.2.4,react-dom@19.2.4"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-browser-bg text-browser-text overflow-hidden">
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
