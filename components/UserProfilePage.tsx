@@ -21,14 +21,23 @@ const UserProfilePage: React.FC<UserProfilePageProps> = ({ user, onLogout }) => 
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const res = await fetch('/api/projects', {
-          headers: { Authorization: `Bearer ${token}` }
+        const { db, auth } = await import('../firebase');
+        const { collection, query, where, getDocs, orderBy } = await import('firebase/firestore');
+        const user = auth.currentUser;
+        if (!user) return;
+        
+        const q = query(
+          collection(db, 'projects'), 
+          where('userId', '==', user.uid)
+        );
+        const querySnapshot = await getDocs(q);
+        const projList: Project[] = [];
+        querySnapshot.forEach((doc) => {
+          projList.push({ id: doc.id as any, ...doc.data() } as Project);
         });
-        if (res.ok) {
-          const data = await res.json();
-          setProjects(data.projects);
-        }
+        // Sort in client if orderBy requires composite index
+        projList.sort((a, b) => new Date(b.deployedAt).getTime() - new Date(a.deployedAt).getTime());
+        setProjects(projList);
       } catch (e) {
         console.error("Failed to fetch projects", e);
       } finally {

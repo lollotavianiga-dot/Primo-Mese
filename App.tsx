@@ -58,36 +58,35 @@ export default function App() {
 
   // Monitor Authentication State
   useEffect(() => {
-    const checkAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        try {
-          const res = await fetch('/api/auth/me', {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const text = await res.text();
-            if (text) {
-                const data = JSON.parse(text);
-                setUser(data.user);
-            } else {
-                localStorage.removeItem('token');
+    import('./firebase').then(({ auth, db }) => {
+      import('firebase/auth').then(({ onAuthStateChanged }) => {
+        import('firebase/firestore').then(({ doc, getDoc }) => {
+          const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            if (firebaseUser) {
+              const userRef = doc(db, 'users', firebaseUser.uid);
+              try {
+                const userDoc = await getDoc(userRef);
+                if (userDoc.exists()) {
+                  setUser(userDoc.data() as User);
+                } else {
+                  setUser({
+                    username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+                    email: firebaseUser.email || undefined
+                  });
+                }
+              } catch (e) {
+                console.error("Failed to load user profile:", e);
                 setUser(null);
+              }
+            } else {
+              setUser(null);
             }
-          } else {
-            localStorage.removeItem('token');
-            setUser(null);
-          }
-        } catch (error) {
-          console.error("Failed to load user profile:", error);
-          setUser(null);
-        }
-      } else {
-        setUser(null);
-      }
-      setAuthLoading(false);
-    };
-    checkAuth();
+            setAuthLoading(false);
+          });
+          return unsubscribe;
+        });
+      });
+    });
   }, []);
 
   const getStorageKey = (username: string) => `devbrowser_files_${username.toLowerCase()}`;
@@ -99,6 +98,8 @@ export default function App() {
   // -- HISTORY STATE (Undo/Redo) --
   const [fileHistory, setFileHistory] = useState<Record<string, { past: string[], future: string[] }>>({});
   const historyTimeout = useRef<any>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const [targetLine, setTargetLine] = useState<number | null>(null);
 
   // Load files when user changes
   useEffect(() => {
@@ -175,6 +176,9 @@ export default function App() {
 
   const handleLogout = async () => {
     localStorage.removeItem('token');
+    const { auth } = await import('./firebase');
+    const { signOut } = await import('firebase/auth');
+    await signOut(auth);
     setUser(null);
     setFiles(INITIAL_FILES);
   };
@@ -496,6 +500,41 @@ export default function App() {
      }
   };
 
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + Shift + F => Search
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setActiveSidebar('search');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Effect to scroll to target line in Editor
+  useEffect(() => {
+    if (editorRef.current && targetLine !== null && !isFixing) {
+      const textarea = editorRef.current;
+      const lines = textarea.value.split('\n');
+      
+      let startPos = 0;
+      for (let i = 0; i < targetLine - 1 && i < lines.length; i++) {
+        startPos += lines[i].length + 1;
+      }
+      
+      textarea.focus();
+      textarea.setSelectionRange(startPos, startPos + (lines[targetLine - 1]?.length || 0));
+      
+      // Calculate scroll (lineHeight ~20px)
+      const lineHeight = 20; 
+      textarea.scrollTop = Math.max(0, (targetLine - 1) * lineHeight - textarea.clientHeight / 2);
+      
+      setTargetLine(null); // Reset after jump
+    }
+  }, [targetLine, activeFileName, activeFile?.content, isFixing]);
+
   // Handle messages from iframe (console)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -601,7 +640,10 @@ export default function App() {
                   onImport={handleImportProject}
                 />
             )}
-            {activeSidebar === 'search' && <Search files={files} onSelect={setActiveFileName} />}
+            {activeSidebar === 'search' && <Search files={files} onSelect={(fileName, line) => {
+              setActiveFileName(fileName);
+              if (line !== undefined) setTargetLine(line);
+            }} />}
             {activeSidebar === 'git' && <SourceControl files={files} commits={commits} onCommit={handleGitCommit} onCheckout={handleGitCheckout} />}
             {activeSidebar === 'deploy' && <Deployment files={files} />}
             {activeSidebar === 'contact' && <Contact />}
@@ -642,6 +684,7 @@ export default function App() {
                  </div>
               </div>
               <textarea
+                ref={editorRef}
                 className="flex-1 w-full bg-[#1e1e1e] text-gray-300 font-mono text-sm p-4 outline-none resize-none leading-relaxed custom-scrollbar"
                 value={activeFile?.content || ''}
                 onChange={(e) => updateFileContent(e.target.value)}

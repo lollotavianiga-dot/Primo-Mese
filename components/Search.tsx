@@ -4,7 +4,7 @@ import { VirtualFile } from '../types';
 
 interface SearchProps {
   files: VirtualFile[];
-  onSelect: (fileName: string) => void;
+  onSelect: (fileName: string, line?: number) => void;
 }
 
 interface SearchResult {
@@ -131,7 +131,7 @@ const Search: React.FC<SearchProps> = ({ files, onSelect }) => {
                                     <div 
                                         key={i} 
                                         className="text-xs text-gray-400 hover:text-white hover:bg-blue-500/20 px-1 py-0.5 rounded cursor-pointer font-mono truncate flex gap-2"
-                                        onClick={() => onSelect(result.file.name)}
+                                        onClick={() => onSelect(result.file.name, match.line)}
                                         title={match.text}
                                     >
                                         <span className="text-gray-600 w-6 text-right flex-shrink-0">{match.line}:</span>

@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidUser(data) {
+      return data.size() >= 3 && data.size() <= 6
+        && data.keys().hasAll(['email', 'username', 'lastLogin'])
+        && data.email is string && data.email.size() <= 200
+        && data.username is string && data.username.size() <= 100
+        && data.lastLogin is string && data.lastLogin.size() <= 100
+        && data.get('phoneNumber', '') is string && data.get('phoneNumber', '').size() <= 100
+        && data.get('firstName', '') is string && data.get('firstName', '').size() <= 100
+        && data.get('lastName', '') is string && data.get('lastName', '').size() <= 100;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId && isValidId(userId);
+      allow list: if false; // No blanket reads of users
+      allow create: if isSignedIn() 
+        && request.auth.uid == userId 
+        && isValidId(userId)
+        && isValidUser(incoming())
+        // allow arbitrary creation but email should match if available, though anonymous might not have email.
+        && (incoming().email == request.auth.token.email || incoming().email == "");
+      
+      allow update: if isSignedIn()
+        && request.auth.uid == userId
+        && isValidId(userId)
+        && isValidUser(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['lastLogin', 'phoneNumber', 'firstName', 'lastName']);
+    }
+
+    function isValidProject(data) {
+      return data.size() == 5
+        && data.keys().hasAll(['userId', 'name', 'subdomain', 'bundledContent', 'deployedAt'])
+        && data.userId is string && data.userId.size() <= 128
+        && data.name is string && data.name.size() <= 200
+        && data.subdomain is string && data.subdomain.size() <= 100
+        && data.bundledContent is string && data.bundledContent.size() <= 1048576 // up to 1MB
+        && data.deployedAt is string && data.deployedAt.size() <= 100;
+    }
+
+    match /projects/{projectId} {
+      // Anyone can read a project to view the deployed site
+      allow read: if isValidId(projectId);
+      allow list: if resource.data.userId == request.auth.uid; // Only list own projects
+
+      allow create: if isSignedIn()
+        && isValidId(projectId)
+        && isValidProject(incoming())
+        && incoming().userId == request.auth.uid;
+      
+      allow update: if isSignedIn()
+        && isValidId(projectId)
+        && existing().userId == request.auth.uid
+        && incoming().userId == existing().userId
+        && isValidProject(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'subdomain', 'bundledContent', 'deployedAt']);
+        
+      allow delete: if isSignedIn()
+        && isValidId(projectId)
+        && existing().userId == request.auth.uid;
+    }
+  }
+}

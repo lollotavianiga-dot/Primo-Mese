@@ -1,7 +1,47 @@
 import React, { useState } from 'react';
-import { ArrowRight, AlertTriangle, Mail, Lock, Phone } from 'lucide-react';
+import { ArrowRight, AlertTriangle } from 'lucide-react';
 import { User as UserType } from '../types';
 import Logo from './Logo';
+import { auth, db } from '../firebase';
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+  }
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 interface AuthScreenProps {
   onLogin: (user: UserType, token: string) => void;
@@ -10,77 +50,53 @@ interface AuthScreenProps {
 const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'register' | 'options'>('options');
-  
-  // Form state
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
 
-  const handleAnonAuth = async () => {
+  const handleGoogleLogin = async () => {
     setError('');
     setIsLoading(true);
     try {
-      const email = `anon_${Date.now()}@anonymous.local`;
-      const password = Math.random().toString(36).slice(-8);
-      const username = `Anon_${Date.now().toString().slice(-4)}`;
-
-      const res = await fetch('/api/auth/anonymous', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, username })
-      });
-
-      let data;
-      const text = await res.text();
-      try {
-        data = text ? JSON.parse(text) : {};
-      } catch(e) {
-        throw new Error(`Server returned invalid response: ${text.substring(0, 50)}`);
-      }
-
-      if (!res.ok) throw new Error(data.error || 'Authentication failed');
-
-      onLogin(data.user, data.token);
-    } catch (err: any) {
-      setError(err.message || 'Anonymous login failed');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
-    
-    try {
-      const endpoint = authMode === 'register' ? '/api/auth/register' : '/api/auth/login';
-      const body = authMode === 'register' ? 
-        { email, password, firstName, lastName, phoneNumber } : 
-        { email, password };
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-
-      let data;
-      const text = await res.text();
-      try {
-        data = text ? JSON.parse(text) : {};
-      } catch(e) {
-        throw new Error(`Server returned invalid response: ${text.substring(0, 50)}`);
-      }
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
       
-      if (!res.ok) {
-        throw new Error(data.error || 'Authentication failed');
+      const userRef = doc(db, 'users', user.uid);
+      let userDoc;
+      try {
+        userDoc = await getDoc(userRef);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.GET, 'users');
       }
 
-      onLogin(data.user, data.token);
+      let userData: UserType;
+
+      if (!userDoc || !userDoc.exists()) {
+        userData = {
+          username: user.displayName || user.email?.split('@')[0] || 'User',
+          email: user.email || undefined,
+          lastLogin: new Date().toISOString()
+        };
+        try {
+          // Note: incoming email must strictly match request.auth.token.email per our rules
+          await setDoc(userRef, {
+            ...userData,
+            email: user.email || ""
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.CREATE, 'users');
+        }
+      } else {
+        userData = userDoc.data() as UserType;
+        try {
+          await setDoc(userRef, {
+            ...userData,
+            lastLogin: new Date().toISOString()
+          }, { merge: true });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, 'users');
+        }
+      }
+
+      onLogin(userData, await user.getIdToken());
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Authentication failed');
@@ -102,9 +118,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
             <Logo className="text-blue-500" size={32} />
           </div>
           <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">Deploy Studio</h1>
-          <p className="text-gray-500 text-sm">
-            {authMode === 'register' ? 'Create an account' : 'Sign in to access your workspace.'}
-          </p>
+          <p className="text-gray-500 text-sm">Sign in to access your workspace.</p>
         </div>
 
         <div className="space-y-4">
@@ -115,140 +129,24 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
             </div>
           )}
 
-          {authMode === 'options' ? (
-            <div className="space-y-3">
-              <button 
-                onClick={() => setAuthMode('login')}
-                className="w-full bg-[#2a2a2a] hover:bg-[#333] border border-gray-700 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-3 transition-all"
-              >
-                <Mail size={18} />
-                Sign in with Email
-              </button>
-              
-              <div className="relative flex items-center py-2">
-                <div className="flex-grow border-t border-gray-700"></div>
-                <span className="flex-shrink-0 mx-4 text-gray-500 text-xs">OR</span>
-                <div className="flex-grow border-t border-gray-700"></div>
-              </div>
-
-              <button 
-                onClick={handleAnonAuth}
-                disabled={isLoading}
-                className={`w-full bg-[#2a2a2a] hover:bg-[#333] border border-gray-700 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-3 transition-all ${isLoading ? 'opacity-70 cursor-wait' : ''}`}
-              >
-                <span className="flex items-center gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                  Continue Anonymously
-                </span>
-              </button>
-              <p className="text-[10px] text-gray-500 text-center mt-2 leading-relaxed">
-                By continuing anonymously, an account is created for you. Note that anonymous accounts will be deleted after 30 days of inactivity.
-              </p>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-            
-            {authMode === 'register' && (
-              <div className="grid grid-cols-2 gap-3 animate-in fade-in">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">First Name</label>
-                  <input 
-                    type="text" 
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    className="w-full bg-[#252526] border border-gray-700 rounded-lg py-2.5 px-3 text-sm text-white focus:border-blue-500 outline-none transition-colors"
-                    placeholder="John"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">Last Name</label>
-                  <input 
-                    type="text" 
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    className="w-full bg-[#252526] border border-gray-700 rounded-lg py-2.5 px-3 text-sm text-white focus:border-blue-500 outline-none transition-colors"
-                    placeholder="Doe"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">Email</label>
-              <div className="relative">
-                <Mail size={16} className="absolute left-3 top-3 text-gray-500" />
-                <input 
-                  type="email" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#252526] border border-gray-700 rounded-lg py-2.5 pl-10 text-sm text-white focus:border-blue-500 outline-none transition-colors"
-                  placeholder="you@example.com"
-                  required
-                />
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">Password</label>
-              <div className="relative">
-                <Lock size={16} className="absolute left-3 top-3 text-gray-500" />
-                <input 
-                  type="password" 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#252526] border border-gray-700 rounded-lg py-2.5 pl-10 text-sm text-white focus:border-blue-500 outline-none transition-colors"
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
-            </div>
-            
-            {authMode === 'register' && (
-              <div className="animate-in fade-in">
-                <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">Phone Number (Required)</label>
-                <div className="relative">
-                  <Phone size={16} className="absolute left-3 top-3 text-gray-500" />
-                  <input 
-                    type="tel" 
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    className="w-full bg-[#252526] border border-gray-700 rounded-lg py-2.5 pl-10 text-sm text-white focus:border-blue-500 outline-none transition-colors"
-                    placeholder="+1234567890"
-                    required
-                  />
-                </div>
-                <p className="text-[10px] text-gray-500 mt-1.5">Include country code (e.g., +1 for US, +39 for IT)</p>
-              </div>
-            )}
-
+          <div className="space-y-3">
             <button 
-              type="submit"
+              onClick={handleGoogleLogin}
               disabled={isLoading}
-              className={`w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all mt-6 shadow-lg shadow-blue-900/20 ${isLoading ? 'opacity-70 cursor-wait' : ''}`}
+              className={`w-full bg-white hover:bg-gray-100 text-gray-900 font-medium py-3 rounded-lg flex items-center justify-center gap-3 transition-all ${isLoading ? 'opacity-70 cursor-wait' : ''}`}
             >
-              {isLoading ? 'Processing...' : (authMode === 'register' ? 'Create Account' : 'Sign In')}
-              {!isLoading && <ArrowRight size={16} />}
+              <svg width="18" height="18" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+                <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>
+                <path fill="#FF3D00" d="m6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C16.318 4 9.656 8.337 6.306 14.691z"/>
+                <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.222 0-9.649-3.342-11.127-8.086l-6.572 4.819C9.656 39.663 16.318 44 24 44z"/>
+                <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002l6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/>
+              </svg>
+              Sign in with Google
             </button>
-
-            <div className="flex flex-col items-center gap-3 pt-4 border-t border-gray-800">
-              <button
-                type="button"
-                onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setError(''); }}
-                className="text-xs text-blue-400 hover:underline"
-              >
-                {authMode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAuthMode('options'); setError(''); }}
-                className="text-xs text-gray-500 hover:text-white"
-              >
-                Back to all options
-              </button>
-            </div>
-          </form>
-          )}
-
+            <p className="text-[10px] text-gray-500 text-center mt-2 leading-relaxed">
+              We've migrated to Google Authentication for better security.
+            </p>
+          </div>
         </div>
       </div>
     </div>

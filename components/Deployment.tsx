@@ -64,27 +64,21 @@ const Deployment: React.FC<DeploymentProps> = ({ files }) => {
         
         await new Promise(r => setTimeout(r, 600));
 
-        // Save to DB
-        const token = localStorage.getItem('token');
-        if (token) {
-          const response = await fetch('/api/deploy/subdomain', {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({
-                  name: domain,
-                  subdomain: domain,
-                  bundledContent: html
-              })
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            if (data.previewUrl) setPreviewUrl(window.location.origin + data.previewUrl);
-          }
-        }
+        // Save to DB via Firebase
+        const { auth, db } = await import('../firebase');
+        const { doc, setDoc } = await import('firebase/firestore');
+        const user = auth.currentUser;
+        if (!user) throw new Error("Must be logged in to deploy");
+        
+        await setDoc(doc(db, 'projects', domain), {
+            userId: user.uid,
+            name: domain,
+            subdomain: domain,
+            bundledContent: html,
+            deployedAt: new Date().toISOString()
+        });
+        
+        setPreviewUrl(`${window.location.origin}/site/${domain}`);
         
         // Simulating deployment success
         setStatus('deployed');
