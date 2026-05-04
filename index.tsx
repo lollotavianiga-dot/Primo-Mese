@@ -16,10 +16,9 @@ const renderApp = async () => {
   
   if (path.startsWith('/site/')) {
     domainId = path.split('/')[2];
-  } else if (!host.includes('localhost') && !host.includes('vercel.app') && !host.includes('run.app')) {
+  } else if (!host.includes('localhost') && !host.includes('vercel.app') && !host.includes('run.app') && !host.includes('deploystudio.org')) {
     // Basic catch for custom subdomain logic on other hosts
     domainId = host.split('.')[0];
-    if (domainId === 'www') domainId = host.replace('www.', '');
   }
 
   if (domainId) {
